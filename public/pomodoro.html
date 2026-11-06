@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>番茄钟</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    display: flex;
+    align-items: stretch;
+    background: #ffffff;
+    color: #1f2d3d;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    user-select: none;
+  }
+  .card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px 10px;
+    border: 1px solid #e6ecf5;
+    background: #ffffff;
+    -webkit-app-region: drag;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 18px;
+  }
+  .phase {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #3575f0;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: #7b8698;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+  }
+  .close {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #9aa4b5;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+  }
+  .close:hover { color: #d23f31; }
+  .time {
+    margin-top: 1px;
+    color: #1f2d3d;
+    font-size: 30px;
+    font-weight: 650;
+    line-height: 1.12;
+    letter-spacing: .5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .time--paused { color: #7b8698; }
+  .bar {
+    height: 3px;
+    margin-top: 5px;
+    border-radius: 999px;
+    background: #eef2f8;
+    overflow: hidden;
+  }
+  .bar__fill {
+    height: 100%;
+    width: 100%;
+    border-radius: inherit;
+    background: #3575f0;
+    transition: width .25s linear;
+  }
+  .bar__fill--break { background: #35a06a; }
+  .actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 7px;
+    -webkit-app-region: no-drag;
+  }
+  .btn {
+    flex: 1;
+    height: 22px;
+    padding: 0 8px;
+    border: 1px solid #dfe6f2;
+    border-radius: 6px;
+    background: #f7f9fd;
+    color: #43516a;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: #3575f0; color: #3575f0; }
+  .btn--primary { background: #3575f0; border-color: #3575f0; color: #fff; }
+  .btn--primary:hover { background: #2c63d6; color: #fff; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="head">
+    <span class="phase"><span id="phaseIcon">🍅</span> <span id="phaseLabel">专注中</span></span>
+    <span class="title" id="title"></span>
+    <button class="close" id="close" title="关闭">×</button>
+  </div>
+  <div class="time" id="time">25:00</div>
+  <div class="bar"><div class="bar__fill" id="bar"></div></div>
+  <div class="actions">
+    <button class="btn" id="toggle">暂停</button>
+    <button class="btn btn--primary" id="stop">停止</button>
+  </div>
+</div>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const channelName = params.get("ch") || "task-secretary-pomodoro";
+  const channel = new BroadcastChannel(channelName);
+  const phaseIconEl = document.getElementById("phaseIcon");
+  const phaseLabelEl = document.getElementById("phaseLabel");
+  const titleEl = document.getElementById("title");
+  const timeEl = document.getElementById("time");
+  const barEl = document.getElementById("bar");
+  const toggleEl = document.getElementById("toggle");
+  const stopEl = document.getElementById("stop");
+  const closeEl = document.getElementById("close");
+
+  let state = null;
+  let completedSent = false;
+  const labels = {
+    focus: "专注中",
+    break: "休息中",
+    pause: "暂停",
+    resume: "继续",
+    stop: "停止",
+    close: "关闭",
+  };
+
+  const format = (seconds) => {
+    const value = Math.max(0, Math.ceil(Number(seconds) || 0));
+    return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+  };
+
+  const currentRemaining = () => {
+    if (!state) return 0;
+    if (!state.running) return 0;
+    if (state.paused) return state.remainingSeconds;
+    return Math.max(0, Math.ceil((state.endsAt - Date.now()) / 1000));
+  };
+
+  const render = () => {
+    if (!state) {
+      phaseIconEl.textContent = "⏸";
+      phaseLabelEl.textContent = labels.stopped || "已停止";
+      titleEl.textContent = "";
+      timeEl.textContent = "00:00";
+      barEl.style.width = "0%";
+      toggleEl.disabled = true;
+      stopEl.disabled = true;
+      return;
+    }
+    const l = Object.assign({}, labels, state.labels || {});
+    const isFocus = state.phase === "focus";
+    phaseIconEl.textContent = isFocus ? "🍅" : "☕";
+    phaseLabelEl.textContent = isFocus ? l.focus : l.break;
+    titleEl.textContent = state.target && state.target.title ? state.target.title : "";
+    timeEl.textContent = format(currentRemaining());
+    timeEl.classList.toggle("time--paused", Boolean(state.paused));
+    barEl.classList.toggle("bar__fill--break", !isFocus);
+    barEl.style.width = `${Math.max(0, Math.min(100, (currentRemaining() / Math.max(1, state.totalSeconds)) * 100))}%`;
+    toggleEl.textContent = state.paused ? l.resume : l.pause;
+    stopEl.textContent = l.stop;
+    closeEl.title = l.close;
+    toggleEl.disabled = !state.running;
+    stopEl.disabled = !state.running;
+  };
+
+  const tick = () => {
+    if (!state || !state.running) return;
+    const remaining = currentRemaining();
+    timeEl.textContent = format(remaining);
+    barEl.style.width = `${Math.max(0, Math.min(100, (remaining / Math.max(1, state.totalSeconds)) * 100))}%`;
+    if (!state.paused && remaining <= 0 && !completedSent) {
+      completedSent = true;
+      channel.postMessage({type: "complete"});
+    }
+  };
+
+  channel.onmessage = (event) => {
+    const data = event.data || {};
+    if (data.type === "state") {
+      state = data.state || null;
+      completedSent = false;
+      render();
+      return;
+    }
+    if (data.type === "stop") {
+      window.close();
+    }
+  };
+
+  toggleEl.addEventListener("click", () => channel.postMessage({type: "toggle"}));
+  stopEl.addEventListener("click", () => channel.postMessage({type: "stop"}));
+  closeEl.addEventListener("click", () => {
+    channel.postMessage({type: "stop"});
+    window.close();
+  });
+
+  window.setInterval(tick, 250);
+  channel.postMessage({type: "ready"});
+  render();
+})();
+</script>
+</body>
+</html>

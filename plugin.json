@@ -1,0 +1,50 @@
+{
+  "name": "task-secretary",
+  "author": "Fly1018",
+  "url": "https://github.com/Fly1018/task-secretary",
+  "version": "0.5.2",
+  "minAppVersion": "3.8.0",
+  "disabledInPublish": true,
+  "backends": [
+    "windows",
+    "linux",
+    "darwin",
+    "ios",
+    "android",
+    "harmony",
+    "docker"
+  ],
+  "frontends": [
+    "desktop",
+    "mobile",
+    "browser-desktop",
+    "browser-mobile",
+    "desktop-window"
+  ],
+  "displayName": {
+    "default": "ZhiXing GTD",
+    "zh-CN": "知行 GTD"
+  },
+  "description": {
+    "default": "A GTD workspace: capture @GTD in daily notes, clarify into quadrants, schedule time blocks, and keep habits.",
+    "zh-CN": "从日记 @GTD 收集，理清到四象限，用时间块推进下一步，并管理日常习惯。"
+  },
+  "readme": {
+    "default": "README.md",
+    "zh-CN": "README.zh-CN.md"
+  },
+  "icon": "icon.png",
+  "preview": "preview.png",
+  "keywords": [
+    "GTD",
+    "任务",
+    "四象限",
+    "时间块",
+    "习惯",
+    "@GTD",
+    "task",
+    "habit",
+    "quadrant",
+    "time block"
+  ]
+}
